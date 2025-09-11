@@ -14,18 +14,17 @@ from sklearn.metrics import mean_squared_error, r2_score
 # Load dataset
 # ---------------------------
 @st.cache_data
-def load_data():
-    df = pd.read_csv("Dataset_Final.csv")
+def load_data(path):
+    df = pd.read_csv(path)
     df = df.dropna().drop_duplicates()
     return df
 
 # ---------------------------
 # Train models
 # ---------------------------
-@st.cache_resource
-def train_models(df):
-    X = df.drop(columns=["area"], errors="ignore")  # target column assumed as "area"
-    y = df["area"] if "area" in df.columns else None
+def train_models(df, target_col):
+    X = df.drop(columns=[target_col])
+    y = df[target_col]
 
     # Encode categorical values
     for col in X.select_dtypes(include=["object"]).columns:
@@ -35,7 +34,9 @@ def train_models(df):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y, test_size=0.2, random_state=42
+    )
 
     # Train RandomForest and Linear Regression
     rf = RandomForestRegressor(random_state=42)
@@ -61,30 +62,35 @@ def train_models(df):
 st.title("🔥 Wildfire Detection & Prediction App")
 st.write("Upload wildfire dataset and predict fire spread area.")
 
-# Load data
-if os.path.exists("Dataset_Final.csv"):
-    df = load_data()
+uploaded_file = st.file_uploader("Upload your CSV dataset", type=["csv"])
+
+if uploaded_file is not None:
+    df = load_data(uploaded_file)
     st.subheader("Dataset Preview")
     st.dataframe(df.head())
 
-    rf_model, lr_model, scaler, results, feature_names = train_models(df)
+    # Select target column
+    target_col = st.selectbox("Select target column (what you want to predict)", df.columns)
 
-    st.subheader("Model Performance")
-    st.write(results)
+    if st.button("Train Models"):
+        rf_model, lr_model, scaler, results, feature_names = train_models(df, target_col)
 
-    st.subheader("Make Prediction")
-    user_input = {}
-    for col in feature_names:
-        value = st.number_input(f"Enter value for {col}", value=0.0)
-        user_input[col] = value
+        st.subheader("Model Performance")
+        st.write(results)
 
-    if st.button("Predict"):
-        input_df = pd.DataFrame([user_input])
-        input_scaled = scaler.transform(input_df)
-        rf_pred = rf_model.predict(input_scaled)[0]
-        lr_pred = lr_model.predict(input_scaled)[0]
+        st.subheader("Make Prediction")
+        user_input = {}
+        for col in feature_names:
+            value = st.number_input(f"Enter value for {col}", value=0.0)
+            user_input[col] = value
 
-        st.success(f"RandomForest Prediction (area): {rf_pred:.2f}")
-        st.success(f"LinearRegression Prediction (area): {lr_pred:.2f}")
+        if st.button("Predict"):
+            input_df = pd.DataFrame([user_input])
+            input_scaled = scaler.transform(input_df)
+            rf_pred = rf_model.predict(input_scaled)[0]
+            lr_pred = lr_model.predict(input_scaled)[0]
+
+            st.success(f"RandomForest Prediction ({target_col}): {rf_pred:.2f}")
+            st.success(f"LinearRegression Prediction ({target_col}): {lr_pred:.2f}")
 else:
-    st.error("Dataset_Final.csv not found. Please upload it in the same directory.")
+    st.info("Please upload a dataset to begin.")
